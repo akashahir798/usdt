@@ -459,7 +459,30 @@ def init_app():
         start_price_updater()
 
 
-init_app()
+# Initialize database tables on first request (lazy initialization)
+_tables_created = False
+
+def ensure_tables():
+    """Create database tables on first request if they don't exist."""
+    global _tables_created
+    if not _tables_created:
+        with app.app_context():
+            try:
+                db.create_all()
+                _tables_created = True
+            except Exception as e:
+                app.logger.error(f"Failed to create tables: {e}")
+                raise
+
+
+@app.before_request
+def create_tables_on_first_request():
+    """Ensure database tables exist before handling any request."""
+    ensure_tables()
+
+
+# Start background price updater
+start_price_updater()
 
 
 # Template Routes
