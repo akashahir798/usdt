@@ -18,7 +18,7 @@ app = Flask(__name__)
 # Configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
-    'mysql+pymysql://root:password@localhost/usdt_portfolio_tracker'
+    'postgresql+psycopg2://postgres:postgres@localhost:5432/usdt_portfolio_tracker'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
