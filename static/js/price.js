@@ -6,7 +6,7 @@ class PriceTracker {
         this.chart = null;
         this.autoRefreshInterval = null;
         this.autoRefreshEnabled = true;
-        this.refreshIntervalMs = 10000; // 10 seconds for more responsive live updates
+        this.refreshIntervalMs = 30000; // 30 seconds (was 10000)
         this.currentTimeframe = 7;
         this.currentChartType = 'line';
         

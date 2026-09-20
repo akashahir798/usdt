@@ -20,3 +20,9 @@ services:
         value: "0"
     healthCheckPath: /
     autoDeploy: true
+
+crons:
+  - name: fetch-usdt-price
+    schedule: "*/1 * * * *"  # Every minute
+    command: "curl -X POST https://$RENDER_EXTERNAL_HOSTNAME/api/price/refresh"
+    environment: production

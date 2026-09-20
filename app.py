@@ -13,6 +13,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Module-level price cache (5-second TTL, thread-safe)
+_price_cache = {'data': None, 'expires': 0}
+_cache_lock = threading.Lock()
+
 app = Flask(__name__)
 
 # Configuration
@@ -342,7 +346,27 @@ def get_transaction_history_with_pl(user_id, current_price_usd=None):
 
 # Price Tracking Functions
 def fetch_usdt_price():
-    """Fetch current USDT price from CoinGecko API."""
+    """Fetch current USDT price from Binance API (no key required, higher rate limits).
+    Falls back to CoinGecko if Binance fails."""
+    # Primary: Binance API (USDT/USDC stablecoin pair)
+    try:
+        response = requests.get(
+            'https://api.binance.com/api/v3/ticker/24hr?symbol=USDTUSDC',
+            timeout=5
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        return {
+            'price_usd': float(data['lastPrice']),
+            'volume_24h': float(data['volume']),
+            'market_cap': 0,  # Binance doesn't provide market cap
+            'last_updated': int(time.time())
+        }
+    except Exception as e:
+        app.logger.error(f'Binance fetch error: {e}')
+    
+    # Fallback: CoinGecko API
     try:
         url = f'{COINGECKO_API_URL}/simple/price'
         params = {
@@ -365,7 +389,7 @@ def fetch_usdt_price():
                 'last_updated': usdt_data.get('last_updated_at', int(time.time()))
             }
     except Exception as e:
-        app.logger.error(f'Error fetching USDT price: {e}')
+        app.logger.error(f'CoinGecko fallback error: {e}')
     
     return None
 
@@ -419,21 +443,42 @@ def get_historical_prices(days=7, interval_hours=1):
 
 
 def get_latest_price():
-    """Get the most recent price from database or fetch fresh."""
+    """Get the most recent price with 5-second server-side cache."""
+    global _price_cache
+    now = time.time()
+    
+    # Return cached if fresh (5 seconds)
+    with _cache_lock:
+        if _price_cache['data'] and now < _price_cache['expires']:
+            return _price_cache['data']
+    
     latest = PriceHistory.query.filter_by(symbol='USDT').order_by(PriceHistory.timestamp.desc()).first()
     
-    # Refresh more frequently for a noticeably more responsive live tracker.
-    if not latest or (datetime.utcnow() - latest.timestamp).total_seconds() > 60:
+    # Refresh if no data or older than 30 seconds
+    if not latest or (datetime.utcnow() - latest.timestamp).total_seconds() > 30:
         price_data = fetch_usdt_price()
         if price_data:
             latest = save_price_history(price_data)
     
-    return latest.to_dict() if latest else {'price_usd': 1.0, 'volume_24h': 0, 'market_cap': 0, 'timestamp': datetime.utcnow().isoformat()}
+    result = latest.to_dict() if latest else {
+        'price_usd': 1.0, 'volume_24h': 0, 'market_cap': 0,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+    
+    # Cache for 5 seconds
+    with _cache_lock:
+        _price_cache = {'data': result, 'expires': now + 5}
+    return result
 
 
 # Background price updater
 def start_price_updater():
-    """Start background thread to periodically update price."""
+    """Start background thread to periodically update price (disabled on Render)."""
+    # Skip on Render - use Cron Job instead
+    if os.environ.get('RENDER'):
+        app.logger.info('Render detected: skipping background price updater (using Cron Job)')
+        return None
+    
     if app.config.get('PRICE_UPDATER_RUNNING'):
         return None
 
@@ -444,7 +489,7 @@ def start_price_updater():
                     fetch_and_store_price()
             except Exception as e:
                 app.logger.error(f'Price updater error: {e}')
-            time.sleep(15)  # Update every 15 seconds for a more live feel
+            time.sleep(60)  # 60 seconds for local dev only
 
     thread = threading.Thread(target=updater, daemon=True)
     thread.start()
@@ -479,10 +524,6 @@ def ensure_tables():
 def create_tables_on_first_request():
     """Ensure database tables exist before handling any request."""
     ensure_tables()
-
-
-# Start background price updater
-start_price_updater()
 
 
 # Template Routes
