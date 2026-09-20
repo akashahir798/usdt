@@ -12,6 +12,24 @@ class PriceTracker {
         
         this.init();
     }
+
+    parseDate(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+
+        const numericValue = Number(value);
+        if (!Number.isNaN(numericValue)) {
+            const timestampMs = numericValue > 1e12 ? numericValue : numericValue * 1000;
+            const parsed = new Date(timestampMs);
+            if (!Number.isNaN(parsed.getTime())) {
+                return parsed;
+            }
+        }
+
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
     
     init() {
         this.bindEvents();
@@ -111,8 +129,10 @@ class PriceTracker {
         }
         
         if (timestampEl && data.timestamp) {
-            const date = new Date(data.timestamp * 1000);
-            timestampEl.textContent = 'Updated: ' + date.toLocaleString();
+            const date = this.parseDate(data.timestamp);
+            if (date) {
+                timestampEl.textContent = 'Updated: ' + date.toLocaleString();
+            }
         }
         
         if (volumeEl) {
@@ -124,8 +144,10 @@ class PriceTracker {
         }
         
         if (lastUpdateEl && data.timestamp) {
-            const date = new Date(data.timestamp * 1000);
-            lastUpdateEl.textContent = date.toLocaleTimeString();
+            const date = this.parseDate(data.timestamp);
+            if (date) {
+                lastUpdateEl.textContent = date.toLocaleTimeString();
+            }
         }
         
         // Calculate 24h change from history
@@ -188,7 +210,10 @@ class PriceTracker {
         const ctx = document.getElementById('priceChart');
         if (!ctx) return;
         
-        const labels = this.priceHistory.map(d => new Date(d.timestamp).toLocaleString());
+        const labels = this.priceHistory.map(d => {
+            const date = this.parseDate(d.timestamp);
+            return date ? date.toLocaleString() : 'N/A';
+        });
         const prices = this.priceHistory.map(d => d.price_usd);
         
         const datasets = [{
@@ -290,10 +315,11 @@ class PriceTracker {
         }
         
         tbody.innerHTML = recent.map(d => {
-            const date = new Date(d.timestamp);
+            const date = this.parseDate(d.timestamp);
+            const formattedDate = date ? date.toISOString().replace('T', ' ').substring(0, 19) : 'N/A';
             return `
                 <tr>
-                    <td>${date.toISOString().replace('T', ' ').substring(0, 19)}</td>
+                    <td>${formattedDate}</td>
                     <td class="fw-monospace">$${d.price_usd.toFixed(6)}</td>
                     <td class="fw-monospace">${this.formatNumber(d.volume_24h)}</td>
                     <td class="fw-monospace">${this.formatNumber(d.market_cap)}</td>

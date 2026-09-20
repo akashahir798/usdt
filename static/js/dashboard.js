@@ -13,6 +13,24 @@ class DashboardManager {
         
         this.init();
     }
+
+    parseDate(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+
+        const numericValue = Number(value);
+        if (!Number.isNaN(numericValue)) {
+            const timestampMs = numericValue > 1e12 ? numericValue : numericValue * 1000;
+            const parsed = new Date(timestampMs);
+            if (!Number.isNaN(parsed.getTime())) {
+                return parsed;
+            }
+        }
+
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
     
     init() {
         this.bindEvents();
@@ -165,8 +183,10 @@ class DashboardManager {
         // Price updated time
         const priceUpdated = document.getElementById('dashPriceUpdated');
         if (priceUpdated && this.plData.timestamp) {
-            const date = new Date(this.plData.timestamp * 1000);
-            priceUpdated.textContent = 'Updated: ' + date.toLocaleTimeString();
+            const date = this.parseDate(this.plData.timestamp);
+            if (date) {
+                priceUpdated.textContent = 'Updated: ' + date.toLocaleTimeString();
+            }
         }
         
         this.updateLastRefresh();
